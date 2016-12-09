@@ -670,3 +670,294 @@ void mytree()	//mytree명령어
 	}
 	return;
 }
+void myshowinode(int i)	//myshowinode명령어
+{
+	int tmp=mfs.inode[i].size;
+	if(mfs.inode[i].dir_or_file == Dir)
+	{
+		if(tmp % 8 != 0)
+			tmp+= (8 - (tmp % 8));
+		printf("file type : directory\n");
+		printf("file size : %d byte\n",tmp / 8);
+	}
+	else if(mfs.inode[i].dir_or_file == File)
+	{
+		printf("file type : regular file\n");
+		printf("file size : %d byte\n",mfs.inode[i].size);
+	}
+	printf("modified time : %d/%02d/%02d %02d:%02d:%02d\n",mfs.inode[i].year, mfs.inode[i].mon, mfs.inode[i].day, mfs.inode[i].hour, mfs.inode[i].min, mfs.inode[i].sec);
+	printf("data block list : ");
+	if(mfs.inode[i].size != 0)	//data block들을 출력
+	{
+		if(mfs.inode[i].direct != 0 || i==0)
+		{
+			printf("%d",mfs.inode[i].direct+1);
+			if(mfs.inode[i].single_indirect != 0)
+			{
+				for(int j=0; j<mfs.data[mfs.inode[i].single_indirect].indirect.cnt; ++j)
+				{
+					printf(", %d",mfs.data[mfs.inode[i].single_indirect].indirect.num[j]+1);
+				}
+				if(mfs.inode[i].double_indirect != 0)
+				{
+					for(int j=0; j<mfs.data[mfs.inode[i].double_indirect].indirect.cnt; ++j)
+					{
+						for(int k=0; k<mfs.data[mfs.data[mfs.inode[i].double_indirect].indirect.num[j]].indirect.cnt; ++k)
+						{
+							printf(", %d",mfs.data[mfs.data[mfs.inode[i].double_indirect].indirect.num[j]].indirect.num[k]+1);
+						}
+					}
+				}
+			}
+		}
+	}
+	printf("\n");
+	return;
+}
+void myshowblock(int i)	//myshowblock명령어
+{
+	if(data_state[i]==Dir)	//data block의 종류가 directory일 경우
+	{
+		for(int j=0; j<mfs.data[i].directory.cnt_file; ++j)
+		{
+			printf("%s %d\n",mfs.data[i].directory.d_name[j], mfs.data[i].directory.d_inum[j]);
+		}
+	}
+	else if(data_state[i]==Ind)	//data block의 종류가 indirect block일 경우
+	{
+		for(int j=0; j<mfs.data[i].indirect.cnt; ++j)
+		{
+			printf("%d\n",mfs.data[i].indirect.num[j]+1);
+		}
+	}
+	else if(data_state[i]==File)	//data block의 종류가 file일 경우
+	{
+		printf("%s",mfs.data[i].file.data);
+	}
+	printf("\n");
+	return;
+}
+void mystate()	//mystate명령어
+{
+	int free_inode=0;
+	int free_data=0;
+	for(int i=0; i<512; ++i)
+	{
+		if(mfs.super.inode[i]==0)
+			++free_inode;
+	}
+	for(int i=0; i<1024; ++i)
+	{
+		if(mfs.super.data[i]==0)
+			++free_data;
+	}
+	printf("free inode : %d\nfree data block : %d\n",free_inode, free_data);
+}
+void mycat(char file_name[100])	//mycat명령어
+{
+	int tmp_i, tmp_d, k;
+	int cur_dnum;
+	int sw=0;
+	int cnt=0, cnt2=0, len=0;
+	int tmp=0;
+	char s[131072];
+	char cut_s[1024][129];
+	char before_file[100][100];
+	char after_file[100];
+	memset(s,0,131072);
+	memset(cut_s,0,1024*129);
+	for(int i=0; i<strlen(file_name); ++i)
+	{
+		if(file_name[i] == '>')
+		{
+			sw=1;
+			break;
+		}
+	}
+	if(sw==0)	//mycat을 이용하여 파일의 내용을 출력할 경우
+	{
+
+		for(int i=1; i<512; ++i)	//입력한 파일을 찾음
+		{
+			if(strcmp(tree[i].name, file_name)==0 && tree[i].next->inum == cur_inum && mfs.inode[tree[i].next->inum].dir_or_file == Dir)
+			{
+				tmp_i=i;
+				break;
+			}
+		}
+		cur_dnum=mfs.inode[tmp_i].direct;
+		if(tree[tmp_i].next != NULL && mfs.inode[tmp_i].dir_or_file == Dir)	//찾은 파일의 종류가 directory일 경우 오류메시지 출력
+		{
+			printf("%s는 파일이 아닙니다\n",file_name);
+			return;
+		}
+		else if(tree[tmp_i].next == NULL)	//파일을 찾지 못했을경우 오류메시지 출력
+		{
+			printf("%s라는 파일이 존재하지 않습니다\n",file_name);
+			return;
+		}
+		if(mfs.inode[tmp_i].size != 0)
+		{
+
+			while(1)	//파일의 내용을 출력함
+			{
+				printf("%s",mfs.data[cur_dnum].file.data);
+				if(mfs.data[cur_dnum].file.next == NULL)
+				{
+					break;
+				}
+				cur_dnum = mfs.data[cur_dnum].file.next->file.dnum;
+			}
+		}
+	}
+	else if(sw==1)
+	{
+		for(int i=0; i<strlen(file_name); ++i)	//'>'전에 입력된 파일의 갯수만큼 before_file변수에 파일명을 저장함
+		{
+			if(file_name[i] == ' ')
+			{
+				for(int j=tmp; j<i; ++j)
+				{
+					before_file[cnt][j-tmp]=file_name[j];
+				}
+				before_file[cnt][5]='\0';	
+				++cnt;
+				tmp = i+1;
+			}
+			else if(file_name[i] == '>')
+			{
+				for(int j=i+2; j<strlen(file_name); ++j)
+				{
+					after_file[j-i-2]=file_name[j];
+				}
+				after_file[5]='\0';
+				break;
+			}
+		}
+		mytouch(after_file);	//새로운 파일을 만듬
+		for(int i=0; i<cnt; ++i)	//before_file에 저장되어 있는 파일들의 내용을 s변수에 이어서 저장함(이후 mycpfrom함수와 유사함)
+		{
+			cnt2=0;
+			for(int j=1; j<512; ++j)
+			{
+				if(strcmp(tree[j].name, before_file[i]) == 0 && tree[j].next->inum == cur_inum)
+				{
+					tmp_i = j;
+					break;
+				}
+			}
+			cur_dnum = mfs.inode[tmp_i].direct;
+			while(1)
+			{
+				if(mfs.data[cur_dnum].file.data[cnt2] == '\0')
+					break;
+				s[len]=mfs.data[cur_dnum].file.data[cnt2];
+				++cnt2;
+				++len;
+				if(cnt2 == 128)
+				{
+					cnt2=0;
+					cur_dnum = mfs.data[cur_dnum].file.next->file.dnum;
+				}
+			}
+		}
+		s[len]='\0';
+		for(int i=1; i<512; ++i)
+		{
+			if(strcmp(tree[i].name, after_file) == 0 && tree[i].next->inum == cur_inum)
+			{
+				tmp_i=i;
+				break;
+			}
+		}
+		mfs.inode[tmp_i].size = len;
+		sw=0;
+		cnt2=0;
+		cnt=0;
+		for(int i=0; i<len; ++i)
+		{
+			if(cnt==128)
+			{
+				cut_s[cnt2][128]='\0';
+				cnt=0;
+				++cnt2;
+			}
+			cut_s[cnt2][cnt]=s[i];
+			++cnt;
+		}
+		cnt=0;
+		cnt2++;
+		if(cnt2>=1)
+		{
+			tmp_d=super_d();
+			data_state[tmp_d] = File;
+			mfs.data[tmp_d].file.dnum = tmp_d;
+			mfs.inode[tmp_i].direct = tmp_d;		//direct block에 번호 할당
+			strcpy(mfs.data[tmp_d].file.data, cut_s[cnt]);		//direct block이 가리키는 data block에 정보 저장
+			++cnt;
+			cur_dnum=tmp_d;
+			mfs.super.data[tmp_d]=1;
+	
+			if(cnt2>=2)
+			{
+				tmp_d=super_d();
+				data_state[tmp_d]=Ind;
+				mfs.inode[tmp_i].single_indirect=tmp_d;		//single indirect block에 번호 할당
+				mfs.super.data[tmp_d]=1;
+				for(int i=0; i<102; ++i)		//single indirect block이 가리키는 data block에 data block 번호 102개 저장
+				{
+					tmp_d=super_d();
+					data_state[tmp_d]=File;
+					mfs.data[tmp_d].file.dnum = tmp_d;
+					mfs.data[mfs.inode[tmp_i].single_indirect].indirect.num[mfs.data[mfs.inode[tmp_i].single_indirect].indirect.cnt] = tmp_d;
+					++mfs.data[mfs.inode[tmp_i].single_indirect].indirect.cnt;
+					mfs.data[cur_dnum].file.next = &mfs.data[tmp_d];		//이전 data block과 현재 data block을 연결
+					mfs.super.data[tmp_d]=1;
+					strcpy(mfs.data[tmp_d].file.data, cut_s[cnt]);
+					cur_dnum = tmp_d;
+					++cnt;
+					if(cnt == cnt2)
+						break;
+				}
+				if(cnt2>=104)
+				{
+					tmp_d=super_d();
+					data_state[tmp_d]=Ind;
+					mfs.inode[tmp_i].double_indirect=tmp_d;		//double indirect block에 번호 할당
+					mfs.super.data[tmp_d]=1;
+					sw=0;
+					for(int i=0; i<102; ++i)	//double indirect block이 가리키는 data block에 single indirect block들을 할당
+					{
+						tmp_d=super_d();
+						data_state[tmp_d]=Ind;
+						mfs.data[mfs.inode[tmp_i].double_indirect].indirect.num[i]=tmp_d;
+						k=tmp_d;
+						++mfs.data[mfs.inode[tmp_i].double_indirect].indirect.cnt;
+						mfs.super.data[tmp_d]=1;
+						for(int j=0; j<102; ++j)	//data block에 내용 저장
+						{
+							tmp_d=super_d();
+							data_state[tmp_d]=File;
+							mfs.data[tmp_d].file.dnum = tmp_d;
+							mfs.data[k].indirect.num[j]=tmp_d;
+							++mfs.data[k].indirect.cnt;
+							mfs.super.data[tmp_d]=1;
+							mfs.data[cur_dnum].file.next = &mfs.data[tmp_d];
+							strcpy(mfs.data[tmp_d].file.data, cut_s[cnt]);
+							cur_dnum = tmp_d;
+							++cnt;
+							if(cnt==cnt2)
+							{
+								sw=1;
+								break;
+							}
+						}
+						if(sw==1)
+							break;
+					}
+				}
+			}
+		}
+	}
+	return;
+}
