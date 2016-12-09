@@ -1242,6 +1242,104 @@ void mycpfrom(char name1[100], char name2[5])	//mycpfrom명령어
 		
 	return;
 }
+void mycat(char file_name[100])	//mycat명령어
+{
+	int tmp_i, tmp_d, k;
+	int cur_dnum;
+	int sw=0;
+	int cnt=0, cnt2=0, len=0;
+	int tmp=0;
+	char s[131072];
+	char cut_s[1024][129];
+	char before_file[100][100];
+	char after_file[100];
+	memset(s,0,131072);
+	memset(cut_s,0,1024*129);
+	for(int i=0; i<strlen(file_name); ++i)
+	{
+		if(file_name[i] == '>')
+		{
+			sw=1;
+			break;
+		}
+	}
+	if(sw==0)	//mycat을 이용하여 파일의 내용을 출력할 경우
+	{
+
+		for(int i=1; i<512; ++i)	//입력한 파일을 찾음
+		{
+			if(strcmp(tree[i].name, file_name)==0 && tree[i].next->inum == cur_inum && mfs.inode[tree[i].next->inum].dir_or_file == Dir)
+			{
+				tmp_i=i;
+				break;
+			}
+		}
+		cur_dnum=mfs.inode[tmp_i].direct;
+		if(tree[tmp_i].next != NULL && mfs.inode[tmp_i].dir_or_file == Dir)	//찾은 파일의 종류가 directory일 경우 오류메시지 출력
+		{
+			printf("%s는 파일이 아닙니다\n",file_name);
+			return;
+		}
+		else if(tree[tmp_i].next == NULL)	//파일을 찾지 못했을경우 오류메시지 출력
+		{
+			printf("%s라는 파일이 존재하지 않습니다\n",file_name);
+			return;
+		}
+		if(mfs.inode[tmp_i].size != 0)
+		{
+
+			while(1)	//파일의 내용을 출력함
+			{
+				printf("%s",mfs.data[cur_dnum].file.data);
+				if(mfs.data[cur_dnum].file.next == NULL)
+				{
+					break;
+				}
+				cur_dnum = mfs.data[cur_dnum].file.next->file.dnum;
+			}
+		}
+	}
+	else if(sw==1)
+	{
+		for(int i=0; i<strlen(file_name); ++i)	//'>'전에 입력된 파일의 갯수만큼 before_file변수에 파일명을 저장함
+		{
+			if(file_name[i] == ' ')
+			{
+				for(int j=tmp; j<i; ++j)
+				{
+					before_file[cnt][j-tmp]=file_name[j];
+				}
+				before_file[cnt][5]='\0';	
+				++cnt;
+				tmp = i+1;
+			}
+			else if(file_name[i] == '>')
+			{
+				for(int j=i+2; j<strlen(file_name); ++j)
+				{
+					after_file[j-i-2]=file_name[j];
+				}
+				after_file[5]='\0';
+				break;
+			}
+		}
+		mytouch(after_file);	//새로운 파일을 만듬
+		for(int i=0; i<cnt; ++i)	//before_file에 저장되어 있는 파일들의 내용을 s변수에 이어서 저장함(이후 mycpfrom함수와 유사함)
+		{
+			cnt2=0;
+			for(int j=1; j<512; ++j)
+			{
+				if(strcmp(tree[j].name, before_file[i]) == 0 && tree[j].next->inum == cur_inum)
+				{
+					tmp_i = j;
+					break;
+				}
+			}
+			cur_dnum = mfs.inode[tmp_i].direct;
+			while(1)
+			{
+				if(mfs.data[cur_dnum].file.data[cnt2] == '\0')
+					break;
 				s[len]=mfs.data[cur_dnum].file.data[cnt2];
 				++cnt2;
 				++len;
@@ -1352,195 +1450,41 @@ void mycpfrom(char name1[100], char name2[5])	//mycpfrom명령어
 	}
 	return;
 }
-int exist(char file_name[5])	//file_name과 같은 이름의 파일이 이미 존재하는지 확인하는 함수
+void mycpto(char file_name[100], char name2[100])	//mycpto명령어
 {
-	int save_cur_inum=cur_inum;
-	int cnt=0, t=0;
-	for(int i=1; i<512; ++i)
+	FILE *ofp;
+	int cur_dnum, tmp_i;
+	ofp=fopen(name2, "w");
+	for(int i=1; i<512; ++i)	//읽으려는 파일을 찾음
 	{
-		if(strcmp(tree[i].name, file_name)==0 && tree[i].next->inum==cur_inum)
+		if(strcmp(tree[i].name, file_name)==0 && tree[i].next->inum == cur_inum && mfs.inode[tree[i].next->inum].dir_or_file == Dir)
 		{
-			return 1;	//존재할 경우 1을 리턴
+			tmp_i=i;
+			break;
 		}
 	}
-	return 0;	//존재하지 않을 경우 0을 리턴
-}
-void mymkdir(char file_name[5])	//mymkdir명령어
-{
-	int sw=0;
-	int tmp_i=0, tmp_d=0;
-	int cnt=0, t=0;
-	if(exist(file_name)==1)	//이미 같은 이름의 파일이 있을경우 메시지를 출력후 함수를 종료함
+	cur_dnum=mfs.inode[tmp_i].direct;
+	if(tree[tmp_i].next != NULL && mfs.inode[tmp_i].dir_or_file == Dir)	//읽으려는 파일의 종류가 directory일 경우 오류메시지 출력
 	{
-		printf("같은 이름의 파일이 있습니다.\n");
+		printf("%s는 파일이 아닙니다\n",file_name);
 		return;
 	}
-	tmp_i=super_i();	//super block에서 사용하지 않는 inode 찾기
-	mfs.super.inode[tmp_i]=1;
-	++cnt_file;
-	if(mfs.super.data[0]==0)	//루트 directory에 data block을 할당
+	else if(tree[tmp_i].next == NULL)	//읽으려는 파일이 존재하지 않을경우 오류메시지 출력
 	{
-		mfs.inode[0].direct=0;
-		data_state[0]=Dir;
-		mfs.super.data[0]=1;
+		printf("%s라는 파일이 존재하지 않습니다\n",file_name);
+		return;
 	}
-	if(mfs.inode[cur_inum].direct==0 && cur_inum!=0)	//현재 directory에 direct block이 할당되어있지 않을경우 data block 할당
+	while(1)	//해당 파일의 내용을 name2파일에 출력
 	{
-		tmp_d=super_d();
-		mfs.inode[cur_inum].direct=tmp_d;
-		data_state[tmp_d]=Dir;
-		mfs.super.data[tmp_d]=1;
+		fprintf(ofp, "%s",mfs.data[cur_dnum].file.data);
+		if(mfs.data[cur_dnum].file.next == NULL)
+		{
+			break;
+		}
+		cur_dnum = mfs.data[cur_dnum].file.next->file.dnum;
 	}
-	if(tree[cur_inum].cnt_file < 24)	//현재 directory의 파일 개수가 24개 미만일 경우 direct block에 저장
-	{
-		cur_dnum=mfs.inode[cur_inum].direct;
-	}
-	else if(tree[cur_inum].cnt_file >= 24)	//현재 directory의 파일 개수가 24개 이상일 경우
-	{
-		if(mfs.inode[cur_inum].single_indirect==0)	//현재 directory의 single indirect block이 할당되어있지 않을 경우 data block 할당
-		{
-			tmp_d=super_d();
-			mfs.inode[cur_inum].single_indirect=tmp_d;
-			data_state[tmp_d]=Ind;
-			mfs.super.data[tmp_d]=1;
-		}
-		if(mfs.data[mfs.inode[cur_inum].direct].directory.cnt_file < 24)	//direct block이 가리키는 data block에서 빈공간이 생겼을 경우 정보를 저장할 data block을 변경
-		{
-			cur_dnum=mfs.inode[cur_inum].direct;
-			sw=1;
-		}
-		if(sw==0)
-		{
-			for(int i=0; i<mfs.data[mfs.inode[cur_inum].single_indirect].indirect.cnt; ++i)	//여태까지 할당한 data block에 빈공간이 생겼을 경우 정보를 저장할 data block을 변경
-			{
-				if(mfs.data[mfs.data[mfs.inode[cur_inum].single_indirect].indirect.num[i]].directory.cnt_file < 24)
-				{
-					cur_dnum=mfs.data[mfs.inode[cur_inum].single_indirect].indirect.num[i];
-					sw=1;
-					break;
-				}
-			}
-		}
-		if(sw==0)	//모든 data block에 공간이 없을 경우 새로운 data block 할당
-		{
-			tmp_d=super_d();
-			mfs.data[mfs.inode[cur_inum].single_indirect].indirect.num[mfs.data[mfs.inode[cur_inum].single_indirect].indirect.cnt]=tmp_d;
-			data_state[tmp_d]=Dir;
-			++mfs.data[mfs.inode[cur_inum].single_indirect].indirect.cnt;
-			mfs.super.data[tmp_d]=1;
-			cur_dnum=tmp_d;
-		}
-	}
-	strcpy(tree[tmp_i].name, file_name);	//tree에 이름 입력
-	mfs.data[cur_dnum].directory.d_inum[mfs.data[cur_dnum].directory.cnt_file]=tmp_i;	//data block에 inode번호 저장
-	strcpy(mfs.data[cur_dnum].directory.d_name[mfs.data[cur_dnum].directory.cnt_file], file_name);	//data block에 이름 저장
-	++mfs.data[cur_dnum].directory.cnt_file;	//현재 directory가 가지고 있는 파일의 개수 +1
-	mfs.inode[tmp_i].dir_or_file=Dir;	//inode에 파일 종류를 directory라고 입력
-	tree[tmp_i].next = &tree[cur_inum];	//tree에 새로만든 directory의 next포인터에 상위 directory 입력
-	++tree[cur_inum].cnt_file;	//현재 directory의 파일 갯수 +1
-	tree[tmp_i].inum=tmp_i;	//방금 만든 directory의 inode번호 저장
-	inode_time(tmp_i);	//directory 생성 시간 설정
-	mfs.inode[cur_inum].size+=42;	//현재 directory의 크기를 42비트 더함(이름 4글자 : 4바이트 = 32비트, inode번호 : 1024=2^10이므로 10비트)
-}
-int super_i()	//사용중이 아닌 inode번호 찾기
-{
-	for(int i=0; i<512; ++i)
-	{
-		if(mfs.super.inode[i]==0)
-		{
-			return i;
-		}
-	}
-	printf("사용 가능한 inode가 없습니다\n");
-	return 0;
-}
-int super_d()	//사용중이 아닌 data block찾기
-{
-	for(int i=0; i<1024; ++i)
-	{
-		if(mfs.super.data[i]==0)
-		{
-			return i;
-		}
-	}
-	printf("사용 가능한 data block이 없습니다\n");
-	return 0;
-}
-void inode_time(int a)	//현재 시간을 저장하는 함수
-{
-	struct tm *t;
-	time_t now;
-	now=time(NULL);
-	t=localtime(&now);
-	mfs.inode[a].year = t->tm_year + 1900;
-	mfs.inode[a].mon = t->tm_mon + 1;
-	mfs.inode[a].day = t->tm_mday;
-	mfs.inode[a].hour = t->tm_hour;
-	mfs.inode[a].min = t->tm_min;
-	mfs.inode[a].sec = t->tm_sec;
-}
-int mycd(char cd[100])	//mycd명령어
-{
-	if(strcmp(a,"mycd")==0)	//mycd만 입력했을경우 홈 디렉토리로 돌아감
-	{
-		cur_inum=0;
-		return 1;
-	}
-	char route[100][5];
-	int cnt=0,tmp=0;
-	int save_cur_inum=cur_inum;
-	for(int i=0; i<=strlen(cd); ++i, ++tmp)	//mycd뒤의 문자열을 '/'를 기준으로 잘라 route배열에 저장함(ex : a/b/c를 route[0]="a", route[1]="b", route[2]="c"로 분리)
-	{
-		if(cd[0]=='/' && i==0)
-		{
-			strcpy(route[0],"/");
-			if(cd[1]=='\0')
-				break;
-			++cnt;
-			tmp=-1;
-		}
-		else
-		{
-			if(cd[i]!='/')
-				route[cnt][tmp]=cd[i];
-			else
-			{
-				route[cnt][tmp]='\0';
-				tmp=-1;
-				++cnt;
-			}
-		}
-	}
-	for(int i=0; i<=cnt; ++i)	//route배열에 입력된 directory로 순서대로 이동함
-	{
-		for(int j=1; j<512; ++j)
-		{
-			if(strcmp(route[i],"..")==0)
-			{
-				cur_inum=tree[cur_inum].next->inum;
-				break;
-			}
-			else if(strcmp(route[i],".")==0)
-				break;
-			else if(strcmp(route[i],"/")==0 || strcmp(route[i],"~")==0)
-			{
-				cur_inum=0;
-				break;
-			}
-			else if(strcmp(tree[j].name, route[i])==0 && strcmp(tree[j].next->name, tree[cur_inum].name)==0 && mfs.inode[j].dir_or_file == Dir)
-			{
-				cur_inum=j;
-				break;
-			}
-			if(j==511)	//디렉토리를 찾지 못하면 오류메시지를 출력 후 원래 경로로 돌아감
-			{
-				printf("해당 디렉토리를 찾을 수 없습니다.\n");
-				cur_inum=save_cur_inum;
-				return 0;
-			}
-		}
-	}
-	return 1;
+	fclose(ofp);
+	return;
 }
 void mycp(char name1[100], char name2[100])	//mycp명령어(name1 : 복사할 파일, name2 : 새로 만들 파일)
 {
@@ -1650,5 +1594,167 @@ void mycp(char name1[100], char name2[100])	//mycp명령어(name1 : 복사할 �
 			}
 		}
 	}
+	return;
+}
+void mymv(char name1[100], char name2[100])	//mymv명령어(name1 : 원래 파일, name2 : 바꿀 이름 또는 이동시킬 위치
+{
+	struct directory_tree *tmp;	
+	int sw=0, tmp_i, tmp_i2;
+	int cur_dnum, save_cur_inum = cur_inum;
+	if(exist(name1)==0)
+	{
+		printf("해당 파일이 존재하지 않습니다.\n");
+		return;
+	}
+	for(int i=1; i<512; ++i)
+	{
+		if(strcmp(tree[i].name, name1)==0 && tree[i].next->inum == cur_inum)
+		{
+			tmp_i=i;
+			inode_time(tmp_i);
+			break;
+		}
+	}
+	for(int i=1; i<512; ++i)
+	{
+		if(strcmp(tree[i].name, name2)==0 && tree[i].next->inum == cur_inum)
+		{
+			sw=1;
+			break;
+		}
+	}
+	if(sw==1)	//name1파일의 경로를 변경할 경우
+	{
+		mycd(name2);	//name2디렉토리로 현재 위치를 옮김
+		if(mfs.inode[tmp_i].dir_or_file == File)	//name1과 동일한 이름의 파일을 생성
+		{
+			mytouch(name1);
+			for(int i=1; i<512; ++i)
+			{
+				if(strcmp(tree[i].name, name1) == 0 && tree[i].next->inum == cur_inum)
+				{
+					tmp_i2=i;
+					break;
+				}
+			}
+			cur_inum = save_cur_inum;	//다시 원래 위치로 돌아감
+		}
+		else if(mfs.inode[tmp_i].dir_or_file == Dir)	//name1과 동일한 이름의 디렉토리를 생성
+		{
+			mymkdir(name1);
+			for(int i=1; i<512; ++i)
+			{
+				if(strcmp(tree[i].name, name1) == 0 && tree[i].next->inum == cur_inum)
+				{
+					tmp_i2=i;
+					break;
+				}
+			}
+			cur_inum = save_cur_inum;	//다시 원래 위치로 돌아감
+		}
+		tmp=tree[tmp_i].next;	//원래 name1의 정보와 새로 생성한 name1의 정보를 서로 바꾼 후 원래 name1파일을 삭제
+		tree[tmp_i].next = tree[tmp_i2].next;
+		tree[tmp_i2].next = tmp;
+		if(mfs.inode[tmp_i].dir_or_file == File)
+		{
+			myrm(name1);
+		}
+		else if(mfs.inode[tmp_i].dir_or_file == Dir)
+		{
+			myrmdir(name1);
+		}
+		mfs.inode[cur_inum].size-=42;
+	}
+	else if(sw==0)	//name1파일의 이름을 name2로 바꿀 경우
+	{
+		cur_dnum = mfs.inode[tmp_i].direct;
+		strcpy(tree[tmp_i].name, name2);	//name1의 이름을 name2로 변경
+		for(int i=0; i<mfs.data[cur_dnum].directory.cnt_file; ++i)
+		{
+			if(strcmp(mfs.data[cur_dnum].directory.d_name[i], name1)==0)
+			{
+				strcpy(mfs.data[cur_dnum].directory.d_name[i], name2);	//현재 디렉토리의 data block에 저장되어 있던 name1의 이름도 name2로 변경
+				break;
+			}
+		}	
+	}
+	return;
+}
+void myrm(char file_name[5])	//myrm명령어
+{
+	int sw=0;
+	for(int i=1; i<512; ++i)
+	{
+		if(strcmp(tree[i].name, file_name)==0 && tree[i].next->inum == cur_inum && mfs.inode[i].dir_or_file == File)	//파일을 찾은 후 delete함수 실행
+		{
+			delete(i, file_name);
+			mfs.inode[cur_inum].size -= 42;
+			--cnt_file;
+			break;
+		}
+		if(i==511)	//파일이 존재하지 않을 경우 오류메시지 출력
+			printf("해당 파일이 존재하지 않습니다.\n");
+	}
+	return;
+
+}
+void myshowfile(int start, int end, char file_name[5])	//myshowfile명령어(start : 읽기 시작할 바이트, end : 읽는걸 끝낼 바이트, file_name : 읽을 파일)
+{
+	int cnt=0;
+	int cur_dnum;
+	int tmp_i;
+	start-=1;
+	end-=1;
+	while(start >= 128)	//start의 크기로 몇번째 data block부터 읽기 시작할지를 cnt에 저장한다
+	{
+		++cnt;
+		start-=128;
+		end-=128;
+	}
+	for(int i=1; i<512; ++i)
+	{
+		if(strcmp(tree[i].name, file_name) == 0 && tree[i].next->inum == cur_inum)
+		{
+			tmp_i=i;
+			break;
+		}
+	}
+	cur_dnum = mfs.inode[tmp_i].direct;	//cur_dnum에 첫번째 data block의 위치를 저장한다
+	for(int i=0; i<cnt; ++i)	//cnt만큼 cur_dnum을 옮긴다
+	{
+		cur_dnum = mfs.data[cur_dnum].file.next->file.dnum;
+	}
+	if(end<128)	//파일의 내용을 출력한다
+	{
+		for(int i=start; i<=end; ++i)
+		{
+			printf("%c",mfs.data[cur_dnum].file.data[i]);
+		}
+	}
+	else if(end>=128)
+	{
+		while(1)
+		{
+			if(end>=128)
+			{
+				for(int i=start; i<128; ++i)
+				{
+					printf("%c",mfs.data[cur_dnum].file.data[i]);
+				}
+				cur_dnum=mfs.data[cur_dnum].file.next->file.dnum;
+				start=0;
+				end-=128;
+			}
+			else if(end<=128)
+			{
+				for(int i=start; i<=end; ++i)
+				{
+					printf("%c",mfs.data[cur_dnum].file.data[i]);
+				}
+				break;
+			}
+		}
+	}
+	printf("\n");
 	return;
 }
