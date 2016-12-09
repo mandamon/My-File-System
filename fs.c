@@ -85,7 +85,398 @@ void mycp(char [], char []);
 void mymv(char [], char []);
 void myrm(char []);
 void myshowfile(int , int, char []);
-
+int main()
+{
+	FILE *ifp, *ofp;
+	char route[100], file_name[5];
+	char name1[100], name2[5];
+	char *p;
+	char tmp_char[10];
+	int e;
+	int save_cur_inum=cur_inum;
+	int start, end;
+	cur_inum=0;
+	cnt_file=1;
+	tree[0].name[0]='/';
+	tree[0].name[1]='\0';
+	tree[0].inum=0;
+	cur_dnum=0;
+	ifp=fopen("myfs","rb");
+	if(ifp!=NULL)	//myfs파일이 존재할때, myfs파일을 읽어 이전에 작업하던 내용을 불러온다
+	{
+		fread(&mfs, sizeof(struct my_file_system), 1, ifp);
+		fread(&cnt_file, sizeof(int), 1, ifp);
+		fread(&tree, sizeof(struct directory_tree), 512, ifp);
+		fread(&data_state, sizeof(char), 1024, ifp);
+	}
+	fclose(ifp);
+	while(1)//myfs_shell
+	{
+		ifp=fopen("myfs","rb");
+		save_cur_inum=cur_inum;	//현재 디렉토리 위치를 저장
+		memset(b,0,100);	//a 초기화
+		memset(a,0,100);	//b 초기화
+		path(cur_inum);	//현재 경로 출력
+		gets(a);	//입력한 문자열을 읽어들임
+		sw=0;
+		for(int i=0; i<=strlen(a); ++i)	//문자열 a에서 명령어가 아닌 부분(옵션, 파일 이름 등)을 잘라내서 b에 저장(ex : mymkdir /a/b/c 에서 /a/b/c만 잘라내 b = "/a/b/c"가 된다)
+		{
+			if(a[i]==' ')
+			{
+				for(int j=i+1; j<=strlen(a); ++j)
+				{
+					b[j-i-1]=a[j];
+				}
+				break;
+			}
+		}
+		if(strcmp(a,"byebye")==0)	//byebye입력시 종료
+			return 0;
+		if(ifp==NULL)	//myfs파일이 존재하지 않을때 mymkfs를 입력시 myfs파일을 만듬
+		{
+			if(a[0]=='m' && a[1]=='y' && a[2]=='m' && a[3]=='k' && a[4]=='f' && a[5]=='s')
+			{
+				mfs.super.inode[0]=1;
+				system("touch myfs");
+				mfs.inode[0].dir_or_file = Dir;
+				inode_time(0);
+				data_state[0]=Dir;
+			}
+		}
+		else
+		{
+			if(a[0]=='m' && a[1]=='y')
+			{
+				if(a[2]=='m' && a[3]=='k' && a[4]=='f' && a[5]=='s')	//mymkfs입력시 myfs파일이 이미 있을때 메시지 출력
+				{
+					printf("이미 myfs파일이 있습니다.\n");
+				}
+				else if(a[2]=='l' && a[3]=='s')	//myls명령어
+				{
+					myls(b);
+				}
+				else if(a[2]=='m' && a[3]=='k' && a[4]=='d' && a[5]=='i' && a[6]=='r')	//mymkdir명령어
+				{
+					cut_path(b,route,file_name);	//b에 저장된 문자열을 경로와 파일이름으로 분리(ex : b="/a/b/c"일때, route="/a/b", file_name="c")
+					if(mycd(route)==1)	//route에 저장된 경로로 이동 후 directory 생성
+					{
+						mymkdir(file_name);
+						cur_inum=save_cur_inum;	//원래 경로로 돌아옴
+					}
+				}
+				else if(a[2]=='c' && a[3]=='d')	//mycd명령어
+				{
+					mycd(b);
+				}
+				else if(a[2]=='r' && a[3]=='m' && a[4]=='d' && a[5]=='i' && a[6]=='r')	//myrmdir명령어
+				{
+					cut_path(b,route,file_name);	//b에 저장된 문자열을 경로와 파일이름으로 분리
+					if(mycd(route)==1)	//route에 저장된 경로로 이동 후 directory삭제
+					{
+						myrmdir(b);
+						cur_inum=save_cur_inum;	//원래 경로로 돌아옴
+					}
+				}
+				else if(a[2]=='s' && a[3]=='t' && a[4]=='a' && a[5]=='t' && a[6]=='e')	//mystate명령어
+				{
+					mystate();
+				}
+				else if(a[2]=='p' && a[3]=='w' && a[4]=='d')	//mypwd명령어
+				{
+					mypwd();
+				}
+				else if(a[2]=='t' && a[3]=='r' && a[4]=='e' && a[5]=='e')	//mytree명령어
+				{
+					if(strlen(b)>=1)	//mytree에서 경로가 입력됬을 경우 해당 디렉토리로 이동
+					{
+						mycd(b);
+					}
+					mypwd();
+					tmp=1;
+					mytree();	//mytree 실행
+					cur_inum=save_cur_inum;	//원래 디렉토리로 돌아옴
+				}
+				else if(a[2]=='t' && a[3]=='o' && a[4]=='u' && a[5]=='c' && a[6]=='h')	//mytouch명령어
+				{
+					cut_path(b,route,file_name);	//b에 저장된 문자열을 경로와 파일이름으로 분리
+					if(mycd(route)==1)	//route에 저장된 경로로 이동 후 file생성
+					{
+						mytouch(file_name);
+						cur_inum=save_cur_inum;	//원래 경로로 돌아옴
+					}
+				}
+				else if(a[2]=='s' && a[3]=='h' && a[4]=='o' && a[5]=='w' && a[6]=='i' && a[7]=='n' && a[8]=='o' && a[9]=='d' && a[10]=='e')	//myshowinode명령어
+				{
+					myshowinode(atoi(b)-1);
+				}
+				else if(a[2]=='c' && a[3]=='p' && a[4]=='f' && a[5]=='r' && a[6]=='o' && a[7]=='m')	//mycpfrom명령어
+				{
+					divide(b,name1,name2);	//b를 내용을 읽을 파일과 내용을 저장할 파일로 나눔
+					mycpfrom(name1, name2);
+				}
+				else if(a[2]=='s' && a[3]=='h' && a[4]=='o' && a[5]=='w' && a[6]=='b' && a[7]=='l' && a[8]=='o' && a[9]=='c' && a[10]=='k')	//myshowblock명령어
+				{
+					myshowblock(atoi(b)-1);
+				}
+				else if(a[2]=='c' && a[3]=='a' && a[4]=='t')	//mycat명령어
+				{
+					for(int i=0; i<strlen(b); ++i)
+					{
+						if(b[i]=='>')
+						{
+							sw=1;
+						}
+					}
+					if(sw==0)	//mycat을 이용하여 파일의 내용을 출력할 경우
+					{
+						cut_path(b,route,file_name);	//b를 경로와 파일명으로 분리
+						if(mycd(route)==1)	//route에 저장된 경로로 이동 후 mycat실행
+						{
+							mycat(file_name);
+							cur_inum=save_cur_inum;	//원래 경로로 돌아옴
+						}
+					}
+					else if(sw==1)	//mycat을 이용하여 파일을 만들 경우
+					{
+						mycat(b);
+					}
+				}
+				else if(a[2] == 'c' && a[3] == 'p' && a[4] == 't' && a[5] == 'o')	//mycpto명령어
+				{
+					divide(b,name1,name2);	//b를 내용을 읽을 파일과 내용을 저장할 파일로 나눔
+					mycpto(name1, name2);
+				}
+				else if(a[2]=='s' && a[3]=='h' && a[4]=='o' && a[5]=='w' && a[6]=='f' && a[7]=='i' && a[8]=='l' && a[9]=='e')	//myshowfile명령어
+				{
+					for(int i=0; i<strlen(b); ++i)	//출력을 시작할 바이트를 저장
+					{
+						if(b[i]==' ')
+						{
+							tmp=i;
+							for(int j=0; j<i; ++j)
+							{
+								tmp_char[j]=b[j];
+							}
+							tmp_char[i]='\0';
+							start=atoi(tmp_char);
+							break;
+						}
+					}
+					memset(tmp_char, 0, 10);
+					for(int i=tmp+1; i<strlen(b); ++i)	//출력을 끝낼 바이트를 저장
+					{
+						if(b[i]==' ')
+						{
+							for(int j=tmp+1; j<i; ++j)
+							{
+								tmp_char[j-tmp-1]=b[j];
+							}
+							tmp_char[i-tmp-1]='\0';
+							end = atoi(tmp_char);
+							tmp=i;
+							break;
+						}
+					}
+					for(int i=0; i<=tmp; ++i)	//출력할 파일의 이름 저장
+					{
+						for(int j=0; j<=strlen(b); ++j)
+						{
+							b[j]=b[j+1];
+						}
+					}
+					cut_path(b, route, file_name);	//b를 경로와 파일명으로 분리
+					if(mycd(route)==1)	//route에 저장된 경로로 이동후 myshowfile명령어 실행
+					{
+						myshowfile(start, end, file_name);
+						cur_inum = save_cur_inum;	//원래 경로로 돌아옴
+					}
+				}
+				else if(a[2]=='c' && a[3]=='p')	//mycp명령어
+				{
+					divide(b, name1, name2);	//b를 원래 파일명, 새로 만들 파일명으로 분리
+					mycp(name1, name2);
+				}
+				else if(a[2]=='r' && a[3]=='m')	//myrm명령어
+				{
+					cut_path(b,route,file_name);	//b를 경로와 파일명으로 분리
+					if(mycd(route)==1)	//route에 저장된 경로로 이동 후 myrm 실행
+					{
+						myrm(file_name);
+						cur_inum=save_cur_inum;	//원래 경로로 돌아옴
+					}
+				}
+				else if(a[2]=='m' && a[3]=='v')	//mymv명령어
+				{
+					divide(b, name1, name2);	//b를 원래 파일명과 변경할 파일명(또는 이동할 directory이름)으로 구분
+					mymv(name1, name2);
+				}
+			}
+			else	//command명령어
+			{
+				p=a;
+				system(p);
+			}
+		}
+		fclose(ifp);
+		ifp=fopen("myfs","rb");
+		if(ifp!=NULL)	//myfs파일이 존재할 때 여태까지 작업한 내용 저장
+		{
+			fclose(ifp);
+			ofp=fopen("myfs","wb");
+			fwrite(&mfs, sizeof(struct my_file_system), 1, ofp);
+			fwrite(&cnt_file, sizeof(int), 1, ofp);	
+			fwrite(&tree, sizeof(struct directory_tree), 512, ofp);
+			fwrite(&data_state, sizeof(char), 1024, ofp);
+			fclose(ofp);
+		}
+		else
+		{
+			fclose(ifp);
+		}
+	}
+}
+void myls(char ls[100])	//myls명령어
+{
+	char (*name)[5];
+	char tmp_name[5];
+	char route[100];
+	int save_cur_inum=cur_inum;
+	int tmp_inum;
+	int cnt=0;
+	int *inum;
+	int n=tree[cur_inum].cnt_file;
+	int tmp;
+	inum=(int *) calloc(n, sizeof(int));	//현재 directory가 가지고 있는 파일의 개수만큼 inum변수의 동적메모리 할당
+	name=(char (*)[5])calloc(n * 5, sizeof(char));	//현재 directory가 가지고 있는 파일의 개수만큼 name변수의 동적메모리 할당
+	strcpy(route,".");
+	if(strlen(a) != 4 && ls[0]=='-')	//myls의 옵션이 주어졌을 경우 ls배열에 옵션을 저장, route에 myls명령어를 실행할 경로를 저장
+	{
+		for(int i=0; i<=strlen(ls); ++i)
+		{
+			if(ls[i]==' ' && ls[i+1]!='-')
+			{
+				for(int j=i+1; j<=strlen(ls); ++j)
+				{
+					if(ls[j]==' ')
+						break;
+					route[j-i-1]=ls[j];
+				}
+				for(int j=0; j<=strlen(route); ++j)
+					for(int k=i; k<strlen(ls); ++k)
+						ls[k]=ls[k+1];
+			}
+		}
+	}
+	else if(strlen(a) != 4 && ls[0]!='-')
+	{
+		for(int i=0; i<=strlen(ls); ++i)
+		{
+			route[i]=ls[i];
+		}
+		for(int i=0; i<=strlen(route); ++i)
+			for(int j=0; j<strlen(ls); ++j)
+				ls[j]=ls[j+1];
+	}
+	mycd(route);	//route에 저장된 경로로 이동
+	if(n==0)	//현재 경로에 저장된 파일이 없을경우 원래 경로로 돌아간 후 함수를 끝냄
+	{
+		cur_inum=save_cur_inum;
+		return;
+	}
+	for(int i=1; i<512; ++i)	//tree구조체의 자기참조구조체인 next가 현재 디렉토리를 가리키고 있을 경우, name배열에 저장
+	{
+		if(tree[i].next != NULL)
+		{
+			if((tree[i].next->inum)==cur_inum)
+			{
+				strcpy(name[cnt],tree[i].name);
+				inum[cnt]=tree[i].inum;
+				++cnt;
+			}
+		}
+		if(cnt==n)
+			break;
+	}
+	if(n>1)
+	{
+		for(int i=n-1; i>=0; --i)	//name배열에 저장된 것들을 오름차순으로 정렬
+		{
+			for(int j=i-1; j>=0; --j)
+			{
+				if(strcmp(name[i],name[j])<0)
+				{
+					strcpy(tmp_name,name[i]);
+					strcpy(name[i],name[j]);
+					strcpy(name[j],tmp_name);
+					tmp_inum=inum[i];
+					inum[i]=inum[j];
+					inum[j]=tmp_inum;
+				}
+			}
+		}
+	}
+	if((ls[0]=='-' && ls[1]=='i' && ls[2]=='l') || (ls[0]=='-' && ls[1]=='l' && ls[2]=='i') || (ls[0]=='-' && ls[1]=='i' && ls[3]=='-' && ls[4]=='l') || (ls[0]=='-' && ls[1]=='l' && ls[3]=='-' && ls[4]=='i'))	//myls의 옵션으로 -l과 -i가 주어졌을 경우
+	{
+		for(int i=0; i<n; ++i)
+		{
+			if(mfs.inode[inum[i]].dir_or_file == Dir)
+			{
+				if(mfs.inode[inum[i]].size!=0)
+				{
+					tmp = mfs.inode[inum[i]].size + (8 - ((mfs.inode[inum[i]].size) % 8));
+				}
+				else
+				{
+					tmp = 0;
+				}
+				printf("%3d %c %4d %04d/%02d/%02d %02d:%02d:%02d %s\n",inum[i]+1, mfs.inode[inum[i]].dir_or_file, tmp/8, mfs.inode[inum[i]].year, mfs.inode[inum[i]].mon, mfs.inode[inum[i]].day, mfs.inode[inum[i]].hour, mfs.inode[inum[i]].min, mfs.inode[inum[i]].sec, name[i]);
+			}
+			else
+			{
+				printf("%3d %c %4d %04d/%02d/%02d %02d:%02d:%02d %s\n",inum[i]+1, mfs.inode[inum[i]].dir_or_file, mfs.inode[inum[i]].size, mfs.inode[inum[i]].year, mfs.inode[inum[i]].mon, mfs.inode[inum[i]].day, mfs.inode[inum[i]].hour, mfs.inode[inum[i]].min, mfs.inode[inum[i]].sec, name[i]);
+			}
+		}
+	}
+	else if(ls[0]=='-' && ls[1]=='i')	//myls의 옵션으로 -i가 주어졌을 경우
+	{
+		for(int i=0; i<n; ++i)
+		{
+			printf("%3d %s\n",inum[i]+1, name[i]);
+		}
+	}
+	else if(ls[0]=='-' && ls[1]=='l')	//myls의 옵션으로 -l이 주어졌을 경우
+	{
+		for(int i=0; i<n; ++i)
+		{
+			if(mfs.inode[inum[i]].dir_or_file == Dir)
+			{
+				if(mfs.inode[inum[i]].size!=0)
+				{
+					tmp = mfs.inode[inum[i]].size + (8-((mfs.inode[inum[i]].size)%8));
+				}
+				else
+				{
+					tmp=0;
+				}
+				printf("%c %4d %04d/%02d/%02d %02d:%02d:%02d %s\n",mfs.inode[inum[i]].dir_or_file, tmp/8, mfs.inode[inum[i]].year, mfs.inode[inum[i]].mon, mfs.inode[inum[i]].day, mfs.inode[inum[i]].hour, mfs.inode[inum[i]].min, mfs.inode[inum[i]].sec, name[i]);
+			}
+			else
+			{
+				printf("%c %4d %04d/%02d/%02d %02d:%02d:%02d %s\n",mfs.inode[inum[i]].dir_or_file, mfs.inode[inum[i]].size, mfs.inode[inum[i]].year, mfs.inode[inum[i]].mon, mfs.inode[inum[i]].day, mfs.inode[inum[i]].hour, mfs.inode[inum[i]].min, mfs.inode[inum[i]].sec, name[i]);
+			}
+		}
+	}
+	else	//옵션이 주어지지 않았을 경우
+	{
+		for(int i=0; i<n; ++i)
+		{
+			printf("%s\n",name[i]);
+		}
+	}
+	free(name);
+	free(inum);
+	cur_inum=save_cur_inum;	//원래 경로로 되돌아옴
+}
 void myshowfile(int start, int end, char file_name[5])	//myshowfile명령어(start : 읽기 시작할 바이트, end : 읽는걸 끝낼 바이트, file_name : 읽을 파일)
 {
 	int cnt=0;
@@ -960,4 +1351,194 @@ void mycat(char file_name[100])	//mycat명령어
 		}
 	}
 	return;
+}
+int exist(char file_name[5])	//file_name과 같은 이름의 파일이 이미 존재하는지 확인하는 함수
+{
+	int save_cur_inum=cur_inum;
+	int cnt=0, t=0;
+	for(int i=1; i<512; ++i)
+	{
+		if(strcmp(tree[i].name, file_name)==0 && tree[i].next->inum==cur_inum)
+		{
+			return 1;	//존재할 경우 1을 리턴
+		}
+	}
+	return 0;	//존재하지 않을 경우 0을 리턴
+}
+void mymkdir(char file_name[5])	//mymkdir명령어
+{
+	int sw=0;
+	int tmp_i=0, tmp_d=0;
+	int cnt=0, t=0;
+	if(exist(file_name)==1)	//이미 같은 이름의 파일이 있을경우 메시지를 출력후 함수를 종료함
+	{
+		printf("같은 이름의 파일이 있습니다.\n");
+		return;
+	}
+	tmp_i=super_i();	//super block에서 사용하지 않는 inode 찾기
+	mfs.super.inode[tmp_i]=1;
+	++cnt_file;
+	if(mfs.super.data[0]==0)	//루트 directory에 data block을 할당
+	{
+		mfs.inode[0].direct=0;
+		data_state[0]=Dir;
+		mfs.super.data[0]=1;
+	}
+	if(mfs.inode[cur_inum].direct==0 && cur_inum!=0)	//현재 directory에 direct block이 할당되어있지 않을경우 data block 할당
+	{
+		tmp_d=super_d();
+		mfs.inode[cur_inum].direct=tmp_d;
+		data_state[tmp_d]=Dir;
+		mfs.super.data[tmp_d]=1;
+	}
+	if(tree[cur_inum].cnt_file < 24)	//현재 directory의 파일 개수가 24개 미만일 경우 direct block에 저장
+	{
+		cur_dnum=mfs.inode[cur_inum].direct;
+	}
+	else if(tree[cur_inum].cnt_file >= 24)	//현재 directory의 파일 개수가 24개 이상일 경우
+	{
+		if(mfs.inode[cur_inum].single_indirect==0)	//현재 directory의 single indirect block이 할당되어있지 않을 경우 data block 할당
+		{
+			tmp_d=super_d();
+			mfs.inode[cur_inum].single_indirect=tmp_d;
+			data_state[tmp_d]=Ind;
+			mfs.super.data[tmp_d]=1;
+		}
+		if(mfs.data[mfs.inode[cur_inum].direct].directory.cnt_file < 24)	//direct block이 가리키는 data block에서 빈공간이 생겼을 경우 정보를 저장할 data block을 변경
+		{
+			cur_dnum=mfs.inode[cur_inum].direct;
+			sw=1;
+		}
+		if(sw==0)
+		{
+			for(int i=0; i<mfs.data[mfs.inode[cur_inum].single_indirect].indirect.cnt; ++i)	//여태까지 할당한 data block에 빈공간이 생겼을 경우 정보를 저장할 data block을 변경
+			{
+				if(mfs.data[mfs.data[mfs.inode[cur_inum].single_indirect].indirect.num[i]].directory.cnt_file < 24)
+				{
+					cur_dnum=mfs.data[mfs.inode[cur_inum].single_indirect].indirect.num[i];
+					sw=1;
+					break;
+				}
+			}
+		}
+		if(sw==0)	//모든 data block에 공간이 없을 경우 새로운 data block 할당
+		{
+			tmp_d=super_d();
+			mfs.data[mfs.inode[cur_inum].single_indirect].indirect.num[mfs.data[mfs.inode[cur_inum].single_indirect].indirect.cnt]=tmp_d;
+			data_state[tmp_d]=Dir;
+			++mfs.data[mfs.inode[cur_inum].single_indirect].indirect.cnt;
+			mfs.super.data[tmp_d]=1;
+			cur_dnum=tmp_d;
+		}
+	}
+	strcpy(tree[tmp_i].name, file_name);	//tree에 이름 입력
+	mfs.data[cur_dnum].directory.d_inum[mfs.data[cur_dnum].directory.cnt_file]=tmp_i;	//data block에 inode번호 저장
+	strcpy(mfs.data[cur_dnum].directory.d_name[mfs.data[cur_dnum].directory.cnt_file], file_name);	//data block에 이름 저장
+	++mfs.data[cur_dnum].directory.cnt_file;	//현재 directory가 가지고 있는 파일의 개수 +1
+	mfs.inode[tmp_i].dir_or_file=Dir;	//inode에 파일 종류를 directory라고 입력
+	tree[tmp_i].next = &tree[cur_inum];	//tree에 새로만든 directory의 next포인터에 상위 directory 입력
+	++tree[cur_inum].cnt_file;	//현재 directory의 파일 갯수 +1
+	tree[tmp_i].inum=tmp_i;	//방금 만든 directory의 inode번호 저장
+	inode_time(tmp_i);	//directory 생성 시간 설정
+	mfs.inode[cur_inum].size+=42;	//현재 directory의 크기를 42비트 더함(이름 4글자 : 4바이트 = 32비트, inode번호 : 1024=2^10이므로 10비트)
+}
+int super_i()	//사용중이 아닌 inode번호 찾기
+{
+	for(int i=0; i<512; ++i)
+	{
+		if(mfs.super.inode[i]==0)
+		{
+			return i;
+		}
+	}
+	printf("사용 가능한 inode가 없습니다\n");
+	return 0;
+}
+int super_d()	//사용중이 아닌 data block찾기
+{
+	for(int i=0; i<1024; ++i)
+	{
+		if(mfs.super.data[i]==0)
+		{
+			return i;
+		}
+	}
+	printf("사용 가능한 data block이 없습니다\n");
+	return 0;
+}
+void inode_time(int a)	//현재 시간을 저장하는 함수
+{
+	struct tm *t;
+	time_t now;
+	now=time(NULL);
+	t=localtime(&now);
+	mfs.inode[a].year = t->tm_year + 1900;
+	mfs.inode[a].mon = t->tm_mon + 1;
+	mfs.inode[a].day = t->tm_mday;
+	mfs.inode[a].hour = t->tm_hour;
+	mfs.inode[a].min = t->tm_min;
+	mfs.inode[a].sec = t->tm_sec;
+}
+int mycd(char cd[100])	//mycd명령어
+{
+	if(strcmp(a,"mycd")==0)	//mycd만 입력했을경우 홈 디렉토리로 돌아감
+	{
+		cur_inum=0;
+		return 1;
+	}
+	char route[100][5];
+	int cnt=0,tmp=0;
+	int save_cur_inum=cur_inum;
+	for(int i=0; i<=strlen(cd); ++i, ++tmp)	//mycd뒤의 문자열을 '/'를 기준으로 잘라 route배열에 저장함(ex : a/b/c를 route[0]="a", route[1]="b", route[2]="c"로 분리)
+	{
+		if(cd[0]=='/' && i==0)
+		{
+			strcpy(route[0],"/");
+			if(cd[1]=='\0')
+				break;
+			++cnt;
+			tmp=-1;
+		}
+		else
+		{
+			if(cd[i]!='/')
+				route[cnt][tmp]=cd[i];
+			else
+			{
+				route[cnt][tmp]='\0';
+				tmp=-1;
+				++cnt;
+			}
+		}
+	}
+	for(int i=0; i<=cnt; ++i)	//route배열에 입력된 directory로 순서대로 이동함
+	{
+		for(int j=1; j<512; ++j)
+		{
+			if(strcmp(route[i],"..")==0)
+			{
+				cur_inum=tree[cur_inum].next->inum;
+				break;
+			}
+			else if(strcmp(route[i],".")==0)
+				break;
+			else if(strcmp(route[i],"/")==0 || strcmp(route[i],"~")==0)
+			{
+				cur_inum=0;
+				break;
+			}
+			else if(strcmp(tree[j].name, route[i])==0 && strcmp(tree[j].next->name, tree[cur_inum].name)==0 && mfs.inode[j].dir_or_file == Dir)
+			{
+				cur_inum=j;
+				break;
+			}
+			if(j==511)	//디렉토리를 찾지 못하면 오류메시지를 출력 후 원래 경로로 돌아감
+			{
+				printf("해당 디렉토리를 찾을 수 없습니다.\n");
+				cur_inum=save_cur_inum;
+				return 0;
+			}
+		}
+	}
+	return 1;
 }
