@@ -85,6 +85,7 @@ void mycp(char [], char []);
 void mymv(char [], char []);
 void myrm(char []);
 void myshowfile(int , int, char []);
+
 int main()
 {
 	FILE *ifp, *ofp;
@@ -335,6 +336,93 @@ int main()
 		}
 	}
 }
+void path(int a)	//경로를 출력하는 함수
+{
+	char route[100][5];
+	int cnt=0;
+	if(a==0)
+	{
+		printf("[/ ]$ ");
+		return;
+	}
+	while(tree[a].next != NULL)	//상위 디렉토리가 존재하지 않을때까지 반복
+	{
+		strcpy(route[cnt],tree[a].name);	//route배열에 현재 디렉토리부터 루트 디렉토리까지 경로를 차례대로 저장
+		++cnt;
+		a=tree[a].next->inum;
+	}
+	printf("[");
+	for(int i=cnt-1; i>=0; --i)	//route배열에 있는 문자열을 마지막부터 첫번째 배열까지 차례대로 출력
+	{
+		printf("/%s",route[i]);
+	}
+	printf("]$ ");
+}
+void cut_path(char name[100], char route[100], char file_name[5])	//name문자열을 경로(route)와 파일명(file_name)으로 분리하는 함수
+{
+	int sw=0;
+	strcpy(route,".");	//route변수의 기본값을 현재디렉토리로 지정
+	if(name[0]=='/')	//절대경로로 입력되었을 경우의 분리방법
+	{
+		for(int i=1; i<strlen(name); ++i)
+		{
+			if(name[i]=='/')
+			{
+				sw=1;
+				break;
+			}
+		}
+		if(sw==0)
+		{
+			strcpy(route,"/");
+			for(int i=1; i<strlen(name); ++i)
+			{
+				file_name[i-1]=name[i];
+			}
+			file_name[4]='\0';
+			return;
+		}
+	}
+		
+	if(strlen(name)==1)
+	{
+		strcpy(file_name,name);
+		return;
+	}
+	for(int i=0; i<strlen(name); ++i)
+	{
+		if(name[i]=='/')
+			sw=1;
+	}
+	if(sw==0)	//경로가 입력되지 않았을 때, file_name에 name을 그대로 저장한 후 리턴함
+	{
+		strcpy(file_name,name);
+		strcpy(route, ".");
+		file_name[4]='\0';
+		return;
+	}
+	for(int i=strlen(name)-1; i>=0; --i)	//상대경로로 입력되었을 경우 분리방법
+	{
+		if(name[i]=='/')
+		{
+			for(int j=0; j<i; ++j)
+			{
+				route[j]=name[j];
+			}
+			route[i]='\0';
+			for(int j=i+1; j<=strlen(name); ++j)
+			{
+				file_name[j-i-1]=name[j];
+			}
+			break;
+		}
+	}
+	route[strlen(route)]='\0';
+	if(route[0]=='\0')
+		strcpy(route,".");
+	file_name[4]='\0';
+	return;
+}
 void myls(char ls[100])	//myls명령어
 {
 	char (*name)[5];
@@ -477,221 +565,133 @@ void myls(char ls[100])	//myls명령어
 	free(inum);
 	cur_inum=save_cur_inum;	//원래 경로로 되돌아옴
 }
-void myshowfile(int start, int end, char file_name[5])	//myshowfile명령어(start : 읽기 시작할 바이트, end : 읽는걸 끝낼 바이트, file_name : 읽을 파일)
+int exist(char file_name[5])	//file_name과 같은 이름의 파일이 이미 존재하는지 확인하는 함수
 {
-	int cnt=0;
-	int cur_dnum;
-	int tmp_i;
-	start-=1;
-	end-=1;
-	while(start >= 128)	//start의 크기로 몇번째 data block부터 읽기 시작할지를 cnt에 저장한다
-	{
-		++cnt;
-		start-=128;
-		end-=128;
-	}
+	int save_cur_inum=cur_inum;
+	int cnt=0, t=0;
 	for(int i=1; i<512; ++i)
 	{
-		if(strcmp(tree[i].name, file_name) == 0 && tree[i].next->inum == cur_inum)
+		if(strcmp(tree[i].name, file_name)==0 && tree[i].next->inum==cur_inum)
 		{
-			tmp_i=i;
-			break;
+			return 1;	//존재할 경우 1을 리턴
 		}
 	}
-	cur_dnum = mfs.inode[tmp_i].direct;	//cur_dnum에 첫번째 data block의 위치를 저장한다
-	for(int i=0; i<cnt; ++i)	//cnt만큼 cur_dnum을 옮긴다
-	{
-		cur_dnum = mfs.data[cur_dnum].file.next->file.dnum;
-	}
-	if(end<128)	//파일의 내용을 출력한다
-	{
-		for(int i=start; i<=end; ++i)
-		{
-			printf("%c",mfs.data[cur_dnum].file.data[i]);
-		}
-	}
-	else if(end>=128)
-	{
-		while(1)
-		{
-			if(end>=128)
-			{
-				for(int i=start; i<128; ++i)
-				{
-					printf("%c",mfs.data[cur_dnum].file.data[i]);
-				}
-				cur_dnum=mfs.data[cur_dnum].file.next->file.dnum;
-				start=0;
-				end-=128;
-			}
-			else if(end<=128)
-			{
-				for(int i=start; i<=end; ++i)
-				{
-					printf("%c",mfs.data[cur_dnum].file.data[i]);
-				}
-				break;
-			}
-		}
-	}
-	printf("\n");
-	return;
+	return 0;	//존재하지 않을 경우 0을 리턴
 }
-void myrmdir(char file_name[5])	//myrmdir 명령어
-{	
-	int sw=0;
-	for(int i=1; i<512; ++i)	//입력된 directory명과 일치하는 directory를 찾음
-	{
-		if(strcmp(tree[i].name, file_name)==0 && tree[i].next->inum == cur_inum && mfs.inode[i].dir_or_file == Dir)
-		{
-			if(tree[i].cnt_file != 0)	//해당 directory의 하위파일이 존재할 경우 오류메시지 출력
-			{
-				printf("해당 디렉토리가 비어있지 않습니다.\n");
-				return;
-			}
-			delete(i, file_name);	//입력된 inode번호로 delete함수 실행
-			mfs.inode[cur_inum].size -= 42;	//현재 directory의 크기를 42줄임
-			--cnt_file;
-			break;
-		}
-		if(i==511)	//마지막까지 입력된 directory를 찾지 못했을 경우 오류 메시지 출력
-			printf("해당 디렉토리가 존재하지 않습니다.\n");
-	}
-	return;
-}
-void delete(int a, char file_name[5])	//a번 아이노드와 관련된 정보를 지우는 함수(a : 삭제할 파일의 inode번호, file_name : 삭제할 파일의 이름)
+void mymkdir(char file_name[5])	//mymkdir명령어
 {
 	int sw=0;
-	int cur_dnum;
-	if(mfs.inode[a].direct !=0)
+	int tmp_i=0, tmp_d=0;
+	int cnt=0, t=0;
+	if(exist(file_name)==1)	//이미 같은 이름의 파일이 있을경우 메시지를 출력후 함수를 종료함
 	{
-		delete_data(mfs.inode[a].direct);	//direct block가 가리키는 data block을 삭제함
-		if(mfs.inode[a].single_indirect != 0)	//single indirect block이 가리키는 data block이 있을 경우 관련된 data block들을 삭제함
-		{
-			for(int i=0; i<mfs.data[mfs.inode[a].single_indirect].indirect.cnt; ++i)
-			{
-				delete_data(mfs.data[mfs.inode[a].single_indirect].indirect.num[i]);
-			}
-			mfs.data[mfs.inode[a].single_indirect].indirect.cnt=0;
-			delete_data(mfs.inode[a].single_indirect);
-			if(mfs.inode[a].double_indirect != 0)	//double indirect block이 가리키는 data block이 있을 경우 관련된 data block들을 삭제함
-			{
-				for(int i=0; i<mfs.data[mfs.inode[a].double_indirect].indirect.cnt; ++i)
-				{
-					cur_dnum = mfs.data[mfs.inode[a].double_indirect].indirect.num[i];
-					for(int j=0; j<mfs.data[cur_dnum].indirect.cnt; ++j)
-					{
-						delete_data(mfs.data[cur_dnum].indirect.num[j]);
-					}
-					delete_data(mfs.data[mfs.inode[a].double_indirect].indirect.num[i]);
-					mfs.data[mfs.data[mfs.inode[a].double_indirect].indirect.num[i]].indirect.cnt=0;
-				}
-				mfs.data[mfs.inode[a].double_indirect].indirect.cnt=0;
-				delete_data(mfs.inode[a].double_indirect);
-			}
-		}
+		printf("같은 이름의 파일이 있습니다.\n");
+		return;
 	}
-	cur_dnum = mfs.inode[cur_inum].direct;
-	sw=0;
-	for(int i=0; i<mfs.data[cur_dnum].directory.cnt_file; ++i)
+	tmp_i=super_i();	//super block에서 사용하지 않는 inode 찾기
+	mfs.super.inode[tmp_i]=1;
+	++cnt_file;
+	if(mfs.super.data[0]==0)	//루트 directory에 data block을 할당
 	{
-		if(strcmp(mfs.data[cur_dnum].directory.d_name[i], file_name)==0)
+		mfs.inode[0].direct=0;
+		data_state[0]=Dir;
+		mfs.super.data[0]=1;
+	}
+	if(mfs.inode[cur_inum].direct==0 && cur_inum!=0)	//현재 directory에 direct block이 할당되어있지 않을경우 data block 할당
+	{
+		tmp_d=super_d();
+		mfs.inode[cur_inum].direct=tmp_d;
+		data_state[tmp_d]=Dir;
+		mfs.super.data[tmp_d]=1;
+	}
+	if(tree[cur_inum].cnt_file < 24)	//현재 directory의 파일 개수가 24개 미만일 경우 direct block에 저장
+	{
+		cur_dnum=mfs.inode[cur_inum].direct;
+	}
+	else if(tree[cur_inum].cnt_file >= 24)	//현재 directory의 파일 개수가 24개 이상일 경우
+	{
+		if(mfs.inode[cur_inum].single_indirect==0)	//현재 directory의 single indirect block이 할당되어있지 않을 경우 data block 할당
 		{
+			tmp_d=super_d();
+			mfs.inode[cur_inum].single_indirect=tmp_d;
+			data_state[tmp_d]=Ind;
+			mfs.super.data[tmp_d]=1;
+		}
+		if(mfs.data[mfs.inode[cur_inum].direct].directory.cnt_file < 24)	//direct block이 가리키는 data block에서 빈공간이 생겼을 경우 정보를 저장할 data block을 변경
+		{
+			cur_dnum=mfs.inode[cur_inum].direct;
 			sw=1;
-			for(int j=i; j<mfs.data[cur_dnum].directory.cnt_file - 1 ; ++j)	//삭제한 파일과 관련된 현재 directory의 data block의 내용을 삭제함
-			{
-				strcpy(mfs.data[cur_dnum].directory.d_name[j], mfs.data[cur_dnum].directory.d_name[j+1]);
-				mfs.data[cur_dnum].directory.d_inum[j] = mfs.data[cur_dnum].directory.d_inum[j+1];
-			}	
-			mfs.data[cur_dnum].directory.d_inum[mfs.data[cur_dnum].directory.cnt_file-1] = 0;
-			memset(mfs.data[cur_dnum].directory.d_name[mfs.data[cur_dnum].directory.cnt_file-1], 0, sizeof(char) * 5);
-			--mfs.data[cur_dnum].directory.cnt_file;
-			if(mfs.data[cur_dnum].directory.cnt_file == 0)	//direct block이 가리키는 data block이 비었을 때 할당했던 data block을 돌려받음
-			{
-				mfs.super.data[mfs.inode[cur_inum].direct]=0;
-				mfs.inode[cur_inum].direct = 0;
-			}
 		}
-		if(sw==1)
+		if(sw==0)
 		{
-			break;
-		}
-	}
-	if(sw==0 && mfs.inode[cur_inum].single_indirect != 0)	//삭제한 파일과 관련된 현재 directory의 data block의 내용을 삭제함
-	{
-		for(int i=0; i<mfs.data[mfs.inode[cur_inum].single_indirect].indirect.cnt; ++i)
-		{
-			cur_dnum = mfs.data[mfs.inode[cur_inum].single_indirect].indirect.num[i];
-			for(int j=0; j<mfs.data[cur_dnum].directory.cnt_file; ++j)
+			for(int i=0; i<mfs.data[mfs.inode[cur_inum].single_indirect].indirect.cnt; ++i)	//여태까지 할당한 data block에 빈공간이 생겼을 경우 정보를 저장할 data block을 변경
 			{
-				if(strcmp(mfs.data[cur_dnum].directory.d_name[j], file_name)==0)
+				if(mfs.data[mfs.data[mfs.inode[cur_inum].single_indirect].indirect.num[i]].directory.cnt_file < 24)
 				{
+					cur_dnum=mfs.data[mfs.inode[cur_inum].single_indirect].indirect.num[i];
 					sw=1;
-					for(int k=j; k<mfs.data[cur_dnum].directory.cnt_file - 1; ++k)
-					{
-						strcpy(mfs.data[cur_dnum].directory.d_name[k], mfs.data[cur_dnum].directory.d_name[k+1]);
-						mfs.data[cur_dnum].directory.d_inum[k] = mfs.data[cur_dnum].directory.d_inum[k+1];
-					}
-					mfs.data[cur_dnum].directory.d_inum[mfs.data[cur_dnum].directory.cnt_file-1] = 0;
-					memset(mfs.data[cur_dnum].directory.d_name[mfs.data[cur_dnum].directory.cnt_file - 1], 0, sizeof(char) * 5);
-					--mfs.data[cur_dnum].directory.cnt_file;
-					if(mfs.data[cur_dnum].directory.cnt_file == 0)
-					{
-						mfs.super.data[cur_dnum]=0;
-						for(int k=0; k<mfs.data[mfs.inode[cur_inum].single_indirect].indirect.cnt; ++k)
-						{
-							if(mfs.data[mfs.inode[cur_inum].single_indirect].indirect.num[k] == cur_dnum)
-							{
-								for(int l=k; l<mfs.data[mfs.inode[cur_inum].single_indirect].indirect.cnt-1; ++l)
-								{
-									mfs.data[mfs.inode[cur_inum].single_indirect].indirect.num[l] = mfs.data[mfs.inode[cur_inum].single_indirect].indirect.num[l+1];
-								}
-								mfs.data[mfs.inode[cur_inum].single_indirect].indirect.num[mfs.data[mfs.inode[cur_inum].single_indirect].indirect.cnt-1]=0;
-								--mfs.data[mfs.inode[cur_inum].single_indirect].indirect.cnt;
-							}
-						}
-						if(mfs.data[mfs.inode[cur_inum].single_indirect].indirect.cnt == 0)	//single indirect block이 가리키는 data block의 내용이 비었을 경우 할당했던 data block을 돌려받음
-						{
-							mfs.super.data[mfs.inode[cur_inum].single_indirect]=0;
-							mfs.inode[cur_inum].single_indirect = 0;
-						}
-					}
 					break;
 				}
 			}
-			if(sw==1)
-				break;
 		}
-	}
-	mfs.inode[a].year = 0;
-	mfs.inode[a].mon = 0;
-	mfs.inode[a].day = 0;
-	mfs.inode[a].hour = 0;
-	mfs.inode[a].min = 0;
-	mfs.inode[a].sec = 0;
-	mfs.inode[a].size = 0;
-	mfs.super.inode[a] = 0;
-	memset(tree[a].name, 0, sizeof(char) * 5);
-	--tree[a].next->cnt_file;
-	tree[a].inum = 0;
-	tree[a].cnt_file = 0;
-	tree[a].next = NULL;
-	mfs.inode[a].dir_or_file = 0;
-	return;
-}
-void delete_data(int a)	//a번째 data block의 내용을 삭제함
-{
-	if(data_state[a] == Dir)	//a번 data block이 directory일 경우
-	{
-		for(int i=0; i<mfs.data[a].directory.cnt_file; ++i)
+		if(sw==0)	//모든 data block에 공간이 없을 경우 새로운 data block 할당
 		{
-			memset(mfs.data[a].directory.d_name[i], 0, 5);
-			mfs.data[a].directory.d_inum[i] = 0;
+			tmp_d=super_d();
+			mfs.data[mfs.inode[cur_inum].single_indirect].indirect.num[mfs.data[mfs.inode[cur_inum].single_indirect].indirect.cnt]=tmp_d;
+			data_state[tmp_d]=Dir;
+			++mfs.data[mfs.inode[cur_inum].single_indirect].indirect.cnt;
+			mfs.super.data[tmp_d]=1;
+			cur_dnum=tmp_d;
 		}
-		mfs.data[a].directory.cnt_file=0;
 	}
-	else if(data_state[a] == File)	//a번 data block이 file일 경우
+	strcpy(tree[tmp_i].name, file_name);	//tree에 이름 입력
+	mfs.data[cur_dnum].directory.d_inum[mfs.data[cur_dnum].directory.cnt_file]=tmp_i;	//data block에 inode번호 저장
+	strcpy(mfs.data[cur_dnum].directory.d_name[mfs.data[cur_dnum].directory.cnt_file], file_name);	//data block에 이름 저장
+	++mfs.data[cur_dnum].directory.cnt_file;	//현재 directory가 가지고 있는 파일의 개수 +1
+	mfs.inode[tmp_i].dir_or_file=Dir;	//inode에 파일 종류를 directory라고 입력
+	tree[tmp_i].next = &tree[cur_inum];	//tree에 새로만든 directory의 next포인터에 상위 directory 입력
+	++tree[cur_inum].cnt_file;	//현재 directory의 파일 갯수 +1
+	tree[tmp_i].inum=tmp_i;	//방금 만든 directory의 inode번호 저장
+	inode_time(tmp_i);	//directory 생성 시간 설정
+	mfs.inode[cur_inum].size+=42;	//현재 directory의 크기를 42비트 더함(이름 4글자 : 4바이트 = 32비트, inode번호 : 1024=2^10이므로 10비트)
+}
+int super_i()	//사용중이 아닌 inode번호 찾기
+{
+	for(int i=0; i<512; ++i)
 	{
+		if(mfs.super.inode[i]==0)
+		{
+			return i;
+		}
+	}
+	printf("사용 가능한 inode가 없습니다\n");
+	return 0;
+}
+int super_d()	//사용중이 아닌 data block찾기
+{
+	for(int i=0; i<1024; ++i)
+	{
+		if(mfs.super.data[i]==0)
+		{
+			return i;
+		}
+	}
+	printf("사용 가능한 data block이 없습니다\n");
+	return 0;
+}
+void inode_time(int a)	//현재 시간을 저장하는 함수
+{
+	struct tm *t;
+	time_t now;
+	now=time(NULL);
+	t=localtime(&now);
+	mfs.inode[a].year = t->tm_year + 1900;
+	mfs.inode[a].mon = t->tm_mon + 1;
+	mfs.inode[a].day = t->tm_mday;
+	mfs.inode[a].hour = t->tm_hour;
+	mfs.inode[a].min = t->tm_min;
+	mfs.inode[a].sec = t->tm_sec;
+}
 		mfs.data[a].file.dnum = 0;
 		memset(mfs.data[a].file.data, 0, 129);
 		mfs.data[a].file.next = NULL;
