@@ -1542,3 +1542,113 @@ int mycd(char cd[100])	//mycd명령어
 	}
 	return 1;
 }
+void mycp(char name1[100], char name2[100])	//mycp명령어(name1 : 복사할 파일, name2 : 새로 만들 파일)
+{
+	int tmp_i, tmp_d, cur_dnum, sw=0;
+	char cut_s[1024][129];
+	int cnt=0, cnt2=0, k, len=0;
+	mytouch(name2);	//name2파일을 새로 만듬
+	for(int i=1; i<512; ++i)
+	{
+		if(strcmp(tree[i].name, name1)==0 && tree[i].next->inum == cur_inum)
+		{
+			tmp_i=i;
+			break;
+		}
+	}
+	cur_dnum = mfs.inode[tmp_i].direct;	//읽을 data block의 시작점을 name1의 첫번쨰 data block으로 저장
+	for(int i=1; i<512; ++i)
+	{
+		if(strcmp(tree[i].name, name2)==0 && tree[i].next->inum == cur_inum)
+		{
+			tmp_i=i;
+			break;
+		}
+	}
+	while(1)	//복사할 파일의 data block들의 내용을 cut_s에 128바이트로 분리해서 저장(이후 mycpfrom함수와 동일)
+	{
+		strcpy(cut_s[cnt], mfs.data[cur_dnum].file.data);
+		len+=strlen(cut_s[cnt]);
+		++cnt;
+		if(mfs.data[cur_dnum].file.next == NULL)
+		{
+			break;
+		}
+		cur_dnum = mfs.data[cur_dnum].file.next->file.dnum;
+	}
+	mfs.inode[tmp_i].size = len;
+	cnt2=cnt;
+	cnt=0;
+	if(cnt2>=1)
+	{
+		tmp_d=super_d();
+		data_state[tmp_d] = File;
+		mfs.data[tmp_d].file.dnum = tmp_d;
+		mfs.inode[tmp_i].direct = tmp_d;		//direct block에 번호 할당
+		strcpy(mfs.data[tmp_d].file.data, cut_s[cnt]);		//direct block이 가리키는 data block에 정보 저장
+		++cnt;
+		cur_dnum=tmp_d;
+		mfs.super.data[tmp_d]=1;
+
+		if(cnt2>=2)
+		{
+			tmp_d=super_d();
+			data_state[tmp_d]=Ind;
+			mfs.inode[tmp_i].single_indirect=tmp_d;		//single indirect block에 번호 할당
+			mfs.super.data[tmp_d]=1;
+			for(int i=0; i<102; ++i)		//single indirect block이 가리키는 data block에 data block 번호 102개 저장
+			{
+				tmp_d=super_d();
+				data_state[tmp_d]=File;
+				mfs.data[tmp_d].file.dnum = tmp_d;
+				mfs.data[mfs.inode[tmp_i].single_indirect].indirect.num[mfs.data[mfs.inode[tmp_i].single_indirect].indirect.cnt] = tmp_d;
+				++mfs.data[mfs.inode[tmp_i].single_indirect].indirect.cnt;
+				mfs.data[cur_dnum].file.next = &mfs.data[tmp_d];		//이전 data block과 현재 data block을 연결
+				mfs.super.data[tmp_d]=1;
+				strcpy(mfs.data[tmp_d].file.data, cut_s[cnt]);
+				cur_dnum = tmp_d;
+				++cnt;
+				if(cnt == cnt2)
+					break;
+			}
+			if(cnt2>=104)
+			{
+				tmp_d=super_d();
+				data_state[tmp_d]=Ind;
+				mfs.inode[tmp_i].double_indirect=tmp_d;		//double indirect block에 번호 할당
+				mfs.super.data[tmp_d]=1;
+				sw=0;
+				for(int i=0; i<102; ++i)
+				{
+					tmp_d=super_d();
+					data_state[tmp_d]=Ind;
+					mfs.data[mfs.inode[tmp_i].double_indirect].indirect.num[i]=tmp_d;
+					k=tmp_d;
+					++mfs.data[mfs.inode[tmp_i].double_indirect].indirect.cnt;
+					mfs.super.data[tmp_d]=1;
+					for(int j=0; j<102; ++j)
+					{
+						tmp_d=super_d();
+						data_state[tmp_d]=File;
+						mfs.data[tmp_d].file.dnum = tmp_d;
+						mfs.data[k].indirect.num[j]=tmp_d;
+						++mfs.data[k].indirect.cnt;
+						mfs.super.data[tmp_d]=1;
+						mfs.data[cur_dnum].file.next = &mfs.data[tmp_d];
+						strcpy(mfs.data[tmp_d].file.data, cut_s[cnt]);
+						cur_dnum = tmp_d;
+						++cnt;
+						if(cnt==cnt2)
+						{
+							sw=1;
+							break;
+						}
+					}
+					if(sw==1)
+						break;
+				}
+			}
+		}
+	}
+	return;
+}
