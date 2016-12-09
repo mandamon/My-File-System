@@ -1009,57 +1009,31 @@ void mytree()	//mytree명령어
 	}
 	return;
 }
-				break;
-			}
-		}	
-	}
-	return;
-}
-void mytree()	//mytree명령어
+void mytouch(char file_name[5])	//mytouch며령어
 {
-	int save_cur_inum=save_cur_inum;
-	int cnt=0;
-	if(tree[cur_inum].cnt_file == 0)
+	int save_cur_inum=cur_inum;
+	if(exist(file_name) == 1)		//현재 존재하는 파일의 시간 변경
 	{
-		--tmp;
-		if(cur_inum != 0)
-			mycd("..");
+		for(int i=1; i<512; ++i)
+		{
+			if(strcmp(tree[i].name, file_name)==0 && tree[i].next->inum==cur_inum)
+			{
+				inode_time(i);
+			}
+		}
 		return;
 	}
-	for(int i=1; i<512; ++i)
+	else if(exist(file_name)==0)	//새로 파일 생성(mymkdir명령어 실행 후 파일의 종류만 file로 변경)
 	{
-		if(tree[i].next != NULL)
+		mymkdir(file_name);
+		for(int i=1; i<512; ++i)
 		{
-			if(tree[i].next->inum == cur_inum)	//하위 디렉토리를 찾은 후
+			if(strcmp(tree[i].name, file_name) == 0 && tree[i].next->inum == cur_inum)
 			{
-				++cnt;
-				for(int j=1; j<=tmp*3; ++j)	//현재 위치에 따라서 '-'과 '*'를 출력하여 파일의 위치를 표시해줌
-				{
-					if(j==tmp*3)
-					{
-						printf("*");
-						break;
-					}
-					printf("-");
-				}
-				printf(" %s\n",tree[i].name);	//발견한 파일명을 출력
-				if(mfs.inode[i].dir_or_file == Dir)	//발견한 파일의 종류가 directory일 경우 해당 디렉토리로 이동 후 mytree를 실행 
-				{
-					++tmp;
-					mycd(tree[i].name);
-					mytree(tmp);
-				}
+				mfs.inode[i].dir_or_file = File;
 			}
 		}
-		if(cnt==tree[cur_inum].cnt_file)	//현재 directory가 가지고 있는 파일을 모두 찾았을 경우 상위 디렉토리로 돌아옴
-		{
-			--tmp;
-			if(cur_inum != 0)
-				mycd("..");
-			return;
-		}
 	}
-	return;
 }
 void myshowinode(int i)	//myshowinode명령어
 {
@@ -1105,6 +1079,28 @@ void myshowinode(int i)	//myshowinode명령어
 	printf("\n");
 	return;
 }
+void divide(char b[100], char name1[100], char name2[100])	//문자열 b를 ' '를 경계로 두 문자열로 나누는 함수(ex : b="apple melon" -> name1="apple", name2="melon")
+{
+	memset(name1, 0, 100);
+	memset(name2, 0, 100);
+	for(int i=0; i<strlen(b); ++i)
+	{
+		if(b[i]==' ')
+		{
+			for(int j=0; j<i; ++j)
+			{
+				name1[j]=b[j];
+			}
+			name1[i]='\0';
+			for(int j=i+1; j<i+5; ++j)
+			{
+				name2[j-i-1]=b[j];
+			}
+			name2[4]='\0';
+		}
+	}
+	return;
+}
 void myshowblock(int i)	//myshowblock명령어
 {
 	if(data_state[i]==Dir)	//data block의 종류가 directory일 경우
@@ -1128,120 +1124,124 @@ void myshowblock(int i)	//myshowblock명령어
 	printf("\n");
 	return;
 }
-void mystate()	//mystate명령어
+void mycpfrom(char name1[100], char name2[5])	//mycpfrom명령어
 {
-	int free_inode=0;
-	int free_data=0;
-	for(int i=0; i<512; ++i)
-	{
-		if(mfs.super.inode[i]==0)
-			++free_inode;
-	}
-	for(int i=0; i<1024; ++i)
-	{
-		if(mfs.super.data[i]==0)
-			++free_data;
-	}
-	printf("free inode : %d\nfree data block : %d\n",free_inode, free_data);
-}
-void mycat(char file_name[100])	//mycat명령어
-{
-	int tmp_i, tmp_d, k;
-	int cur_dnum;
-	int sw=0;
-	int cnt=0, cnt2=0, len=0;
-	int tmp=0;
-	char s[131072];
-	char cut_s[1024][129];
-	char before_file[100][100];
-	char after_file[100];
-	memset(s,0,131072);
+	char c, s[131703], cut_s[1024][129];	//s : name1파일의 내용을 저장할 변수, cut_s : s에 저장된 내용을 128바이트마다 잘라서 저장할 변수
+	FILE *ifp;
+	int len=0;	//s의 길이(name1파일의 크기[바이트 수])
+	int tmp_i, tmp_d;
+	memset(s,0,131703);
 	memset(cut_s,0,1024*129);
-	for(int i=0; i<strlen(file_name); ++i)
+	ifp=fopen(name1, "r");
+	mytouch(name2);	//name2파일을 생성
+	for(int i=1; i<512; ++i)
 	{
-		if(file_name[i] == '>')
+		if(strcmp(tree[i].name, name2)==0 && tree[i].next->inum == cur_inum && mfs.inode[tree[i].next->inum].dir_or_file == Dir)
 		{
-			sw=1;
+			tmp_i=i;
 			break;
 		}
 	}
-	if(sw==0)	//mycat을 이용하여 파일의 내용을 출력할 경우
+	while(1)	//name1파일의 내용을 s에 저장
 	{
+		c=getc(ifp);
+		if(c==EOF)
+		{
+			break;
+		}
+		s[len]=c;
+		++len;
+	}
+	mfs.inode[tmp_i].size = len;
+	fclose(ifp);
+	int cnt=0, cnt2=0, k;
+	for(int i=0; i<len; ++i)	//s를 128바이트마다 잘라 cut_s에 저장
+	{
+		if(cnt==128)
+		{
+			cut_s[cnt2][128]='\0';
+			cnt=0;
+			++cnt2;
+		}
+		cut_s[cnt2][cnt]=s[i];
+		++cnt;
+	}
+	cnt=0;
+	cnt2++;
+	if(cnt2>=1)
+	{
+		tmp_d=super_d();
+		data_state[tmp_d] = File;
+		mfs.data[tmp_d].file.dnum = tmp_d;
+		mfs.inode[tmp_i].direct = tmp_d;		//direct block에 번호 할당
+		strcpy(mfs.data[tmp_d].file.data, cut_s[cnt]);		//direct block이 가리키는 data block에 정보 저장
+		++cnt;
+		cur_dnum=tmp_d;
+		mfs.super.data[tmp_d]=1;
 
-		for(int i=1; i<512; ++i)	//입력한 파일을 찾음
+		if(cnt2>=2)
 		{
-			if(strcmp(tree[i].name, file_name)==0 && tree[i].next->inum == cur_inum && mfs.inode[tree[i].next->inum].dir_or_file == Dir)
+			tmp_d=super_d();
+			data_state[tmp_d]=Ind;
+			mfs.inode[tmp_i].single_indirect=tmp_d;		//single indirect block에 번호 할당
+			mfs.super.data[tmp_d]=1;
+			for(int i=0; i<102; ++i)		//single indirect block이 가리키는 data block에 data block 번호 102개 저장
 			{
-				tmp_i=i;
-				break;
-			}
-		}
-		cur_dnum=mfs.inode[tmp_i].direct;
-		if(tree[tmp_i].next != NULL && mfs.inode[tmp_i].dir_or_file == Dir)	//찾은 파일의 종류가 directory일 경우 오류메시지 출력
-		{
-			printf("%s는 파일이 아닙니다\n",file_name);
-			return;
-		}
-		else if(tree[tmp_i].next == NULL)	//파일을 찾지 못했을경우 오류메시지 출력
-		{
-			printf("%s라는 파일이 존재하지 않습니다\n",file_name);
-			return;
-		}
-		if(mfs.inode[tmp_i].size != 0)
-		{
-
-			while(1)	//파일의 내용을 출력함
-			{
-				printf("%s",mfs.data[cur_dnum].file.data);
-				if(mfs.data[cur_dnum].file.next == NULL)
-				{
+				tmp_d=super_d();
+				data_state[tmp_d]=File;
+				mfs.data[tmp_d].file.dnum = tmp_d;
+				mfs.data[mfs.inode[tmp_i].single_indirect].indirect.num[mfs.data[mfs.inode[tmp_i].single_indirect].indirect.cnt] = tmp_d;
+				++mfs.data[mfs.inode[tmp_i].single_indirect].indirect.cnt;
+				mfs.data[cur_dnum].file.next = &mfs.data[tmp_d];		//이전 data block과 현재 data block을 연결
+				mfs.super.data[tmp_d]=1;
+				strcpy(mfs.data[tmp_d].file.data, cut_s[cnt]);
+				cur_dnum = tmp_d;
+				++cnt;
+				if(cnt == cnt2)
 					break;
+			}
+			if(cnt2>=104)
+			{
+				tmp_d=super_d();
+				data_state[tmp_d]=Ind;
+				mfs.inode[tmp_i].double_indirect=tmp_d;		//double indirect block에 번호 할당
+				mfs.super.data[tmp_d]=1;
+				sw=0;
+				for(int i=0; i<102; ++i)	//double indirect block이 가리키는 data block에 single indirect block번호 저장
+				{
+					tmp_d=super_d();
+					data_state[tmp_d]=Ind;
+					mfs.data[mfs.inode[tmp_i].double_indirect].indirect.num[i]=tmp_d;
+					k=tmp_d;
+					++mfs.data[mfs.inode[tmp_i].double_indirect].indirect.cnt;
+					mfs.super.data[tmp_d]=1;
+					for(int j=0; j<102; ++j)	//data block에 내용 저장
+					{
+						tmp_d=super_d();
+						data_state[tmp_d]=File;
+						mfs.data[tmp_d].file.dnum = tmp_d;
+						mfs.data[k].indirect.num[j]=tmp_d;
+						++mfs.data[k].indirect.cnt;
+						mfs.super.data[tmp_d]=1;
+						mfs.data[cur_dnum].file.next = &mfs.data[tmp_d];
+						strcpy(mfs.data[tmp_d].file.data, cut_s[cnt]);
+						cur_dnum = tmp_d;
+						++cnt;
+						if(cnt==cnt2)
+						{
+							sw=1;
+							break;
+						}
+					}
+					if(sw==1)
+						break;
 				}
-				cur_dnum = mfs.data[cur_dnum].file.next->file.dnum;
 			}
 		}
 	}
-	else if(sw==1)
-	{
-		for(int i=0; i<strlen(file_name); ++i)	//'>'전에 입력된 파일의 갯수만큼 before_file변수에 파일명을 저장함
-		{
-			if(file_name[i] == ' ')
-			{
-				for(int j=tmp; j<i; ++j)
-				{
-					before_file[cnt][j-tmp]=file_name[j];
-				}
-				before_file[cnt][5]='\0';	
-				++cnt;
-				tmp = i+1;
-			}
-			else if(file_name[i] == '>')
-			{
-				for(int j=i+2; j<strlen(file_name); ++j)
-				{
-					after_file[j-i-2]=file_name[j];
-				}
-				after_file[5]='\0';
-				break;
-			}
-		}
-		mytouch(after_file);	//새로운 파일을 만듬
-		for(int i=0; i<cnt; ++i)	//before_file에 저장되어 있는 파일들의 내용을 s변수에 이어서 저장함(이후 mycpfrom함수와 유사함)
-		{
-			cnt2=0;
-			for(int j=1; j<512; ++j)
-			{
-				if(strcmp(tree[j].name, before_file[i]) == 0 && tree[j].next->inum == cur_inum)
-				{
-					tmp_i = j;
-					break;
-				}
-			}
-			cur_dnum = mfs.inode[tmp_i].direct;
-			while(1)
-			{
-				if(mfs.data[cur_dnum].file.data[cnt2] == '\0')
-					break;
+		
+	return;
+}
 				s[len]=mfs.data[cur_dnum].file.data[cnt2];
 				++cnt2;
 				++len;
