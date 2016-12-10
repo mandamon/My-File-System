@@ -90,7 +90,7 @@ int main()
 {
 	FILE *ifp, *ofp;
 	char route[100], file_name[5];
-	char name1[100], name2[5];
+	char name1[100], name2[100];
 	char *p;
 	char tmp_char[10];
 	int e;
@@ -117,6 +117,8 @@ int main()
 		save_cur_inum=cur_inum;	//현재 디렉토리 위치를 저장
 		memset(b,0,100);	//a 초기화
 		memset(a,0,100);	//b 초기화
+		memset(name1,0,100);	//name1 초기화
+		memset(name2,0,100);	//name2 초기화
 		path(cur_inum);	//현재 경로 출력
 		gets(a);	//입력한 문자열을 읽어들임
 		sw=0;
@@ -174,7 +176,7 @@ int main()
 					cut_path(b,route,file_name);	//b에 저장된 문자열을 경로와 파일이름으로 분리
 					if(mycd(route)==1)	//route에 저장된 경로로 이동 후 directory삭제
 					{
-						myrmdir(b);
+						myrmdir(file_name);
 						cur_inum=save_cur_inum;	//원래 경로로 돌아옴
 					}
 				}
@@ -213,7 +215,12 @@ int main()
 				else if(a[2]=='c' && a[3]=='p' && a[4]=='f' && a[5]=='r' && a[6]=='o' && a[7]=='m')	//mycpfrom명령어
 				{
 					divide(b,name1,name2);	//b를 내용을 읽을 파일과 내용을 저장할 파일로 나눔
-					mycpfrom(name1, name2);
+					cut_path(name2, route, file_name);	//name2를 경로와 파일명으로 나눔
+					if(mycd(route)==1)
+					{
+						mycpfrom(name1, file_name);
+						cur_inum = save_cur_inum;
+					}
 				}
 				else if(a[2]=='s' && a[3]=='h' && a[4]=='o' && a[5]=='w' && a[6]=='b' && a[7]=='l' && a[8]=='o' && a[9]=='c' && a[10]=='k')	//myshowblock명령어
 				{
@@ -245,7 +252,12 @@ int main()
 				else if(a[2] == 'c' && a[3] == 'p' && a[4] == 't' && a[5] == 'o')	//mycpto명령어
 				{
 					divide(b,name1,name2);	//b를 내용을 읽을 파일과 내용을 저장할 파일로 나눔
-					mycpto(name1, name2);
+					cut_path(name1, route, file_name);	//name1을 경로와 파일명으로 나눔
+					if(mycd(route)==1)
+					{
+						mycpto(file_name, name2);
+						cur_inum = save_cur_inum;
+					}
 				}
 				else if(a[2]=='s' && a[3]=='h' && a[4]=='o' && a[5]=='w' && a[6]=='f' && a[7]=='i' && a[8]=='l' && a[9]=='e')	//myshowfile명령어
 				{
@@ -434,8 +446,6 @@ void myls(char ls[100])	//myls명령어
 	int *inum;
 	int n=tree[cur_inum].cnt_file;
 	int tmp;
-	inum=(int *) calloc(n, sizeof(int));	//현재 directory가 가지고 있는 파일의 개수만큼 inum변수의 동적메모리 할당
-	name=(char (*)[5])calloc(n * 5, sizeof(char));	//현재 directory가 가지고 있는 파일의 개수만큼 name변수의 동적메모리 할당
 	strcpy(route,".");
 	if(strlen(a) != 4 && ls[0]=='-')	//myls의 옵션이 주어졌을 경우 ls배열에 옵션을 저장, route에 myls명령어를 실행할 경로를 저장
 	{
@@ -466,6 +476,9 @@ void myls(char ls[100])	//myls명령어
 				ls[j]=ls[j+1];
 	}
 	mycd(route);	//route에 저장된 경로로 이동
+	n=tree[cur_inum].cnt_file;
+	inum=(int *) calloc(n, sizeof(int));	//현재 directory가 가지고 있는 파일의 개수만큼 inum변수의 동적메모리 할당
+	name=(char (*)[5])calloc(n * 5, sizeof(char));	//현재 directory가 가지고 있는 파일의 개수만큼 name변수의 동적메모리 할당
 	if(n==0)	//현재 경로에 저장된 파일이 없을경우 원래 경로로 돌아간 후 함수를 끝냄
 	{
 		cur_inum=save_cur_inum;
@@ -1054,7 +1067,7 @@ void myshowinode(int i)	//myshowinode명령어
 	printf("data block list : ");
 	if(mfs.inode[i].size != 0)	//data block들을 출력
 	{
-		if(mfs.inode[i].direct != 0 || i==0)
+		if(cur_dnum != 0 || i==0)
 		{
 			printf("%d",mfs.inode[i].direct+1);
 			if(mfs.inode[i].single_indirect != 0)
@@ -1091,12 +1104,10 @@ void divide(char b[100], char name1[100], char name2[100])	//문자열 b를 ' '�
 			{
 				name1[j]=b[j];
 			}
-			name1[i]='\0';
-			for(int j=i+1; j<i+5; ++j)
+			for(int j=i+1; j<strlen(b); ++j)
 			{
 				name2[j-i-1]=b[j];
 			}
-			name2[4]='\0';
 		}
 	}
 	return;
@@ -1454,7 +1465,6 @@ void mycpto(char file_name[100], char name2[100])	//mycpto명령어
 {
 	FILE *ofp;
 	int cur_dnum, tmp_i;
-	ofp=fopen(name2, "w");
 	for(int i=1; i<512; ++i)	//읽으려는 파일을 찾음
 	{
 		if(strcmp(tree[i].name, file_name)==0 && tree[i].next->inum == cur_inum && mfs.inode[tree[i].next->inum].dir_or_file == Dir)
@@ -1474,6 +1484,7 @@ void mycpto(char file_name[100], char name2[100])	//mycpto명령어
 		printf("%s라는 파일이 존재하지 않습니다\n",file_name);
 		return;
 	}
+	ofp=fopen(name2, "w");
 	while(1)	//해당 파일의 내용을 name2파일에 출력
 	{
 		fprintf(ofp, "%s",mfs.data[cur_dnum].file.data);
